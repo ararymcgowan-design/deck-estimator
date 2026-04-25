@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Deck Pro Estimator</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script>emailjs.init('PrcI1bt1c9d-l53RD');</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1280,16 +1278,6 @@
       <button class="btn btn-green" onclick="emailEstimate()">📧 Email to Client</button>
       <button class="btn btn-outline" onclick="copyEstimate()">📋 Copy to Clipboard</button>
     </div>
-
-    <!-- EMAIL STATUS MODAL -->
-    <div id="emailModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:999; align-items:center; justify-content:center; padding:24px;">
-      <div style="background:#1C2B3A; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:28px; max-width:360px; width:100%; text-align:center;">
-        <div id="emailModalIcon" style="font-size:48px; margin-bottom:16px;">⏳</div>
-        <div id="emailModalTitle" style="font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:2px; margin-bottom:10px;">Sending...</div>
-        <div id="emailModalMsg" style="font-size:14px; color:#9CA3AF; line-height:1.6; margin-bottom:20px;"></div>
-        <button onclick="document.getElementById('emailModal').style.display='none'" class="btn btn-outline" style="width:100%;">Close</button>
-      </div>
-    </div>
   </div>
 
   <!-- RATES TAB -->
@@ -1848,7 +1836,7 @@ function clearForm() {
 }
 
 // ─── EMAIL ESTIMATE ──────────────────────────────────────────
-async function emailEstimate() {
+function emailEstimate() {
   const clientEmail = txt('clientEmail').trim();
   if (!clientEmail) {
     alert('Please add the client email address in the Client tab first.');
@@ -1863,48 +1851,39 @@ async function emailEstimate() {
 
   const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const clientName = [txt('clientFirst'), txt('clientLast')].filter(Boolean).join(' ') || 'Valued Client';
-  const address = [txt('clientAddr'), txt('clientCity'), txt('clientState')].filter(Boolean).join(', ') || 'N/A';
+  const address = [txt('clientAddr'), txt('clientCity'), txt('clientState')].filter(Boolean).join(', ') || '';
   const now = new Date();
   const estNum = txt('estPrefix') + estCounter;
+  const company = txt('companyName') || 'Pioneer Woodwerx General Contracting';
+  const phone = txt('companyPhone') || '';
+  const email = txt('companyEmail') || 'pioneerwoodwerx@gmail.com';
 
-  // Build line items text
-  const lineItemsText = lines.map(l => `${l.name} (${l.qty || '1'}): ${fmt(l.total)}`).join('\n');
+  const subject = `Project Estimate ${estNum} – ${company}`;
 
-  // Build total summary
-  let totalText = `Subtotal: ${fmt(subtotal)}`;
-  if (discount > 0) totalText += `\nDiscount: -${fmt(discount)}`;
-  if (tax > 0) totalText += `\nTax: ${fmt(tax)}`;
-  totalText += `\n\nTOTAL: ${fmt(grand)}`;
+  let body = `Dear ${clientName},\n\n`;
+  body += `Thank you for the opportunity to work with you. Please find your project estimate below.\n\n`;
+  body += `ESTIMATE #: ${estNum}\n`;
+  body += `DATE: ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}\n`;
+  if (address) body += `PROJECT ADDRESS: ${address}\n`;
+  body += `\n────────────────────\nESTIMATE BREAKDOWN\n────────────────────\n`;
+  lines.forEach(l => {
+    body += `${l.name}: ${fmt(l.total)}\n`;
+    if (l.desc) body += `  (${l.desc})\n`;
+  });
+  body += `────────────────────\n`;
+  body += `Subtotal: ${fmt(subtotal)}\n`;
+  if (discount > 0) body += `Discount: -${fmt(discount)}\n`;
+  if (tax > 0) body += `Tax: ${fmt(tax)}\n`;
+  body += `\nTOTAL: ${fmt(grand)}\n\n`;
+  body += `────────────────────\nTERMS\n────────────────────\n`;
+  body += txt('defaultTerms') || '50% deposit required to schedule. Balance due upon completion. Valid 30 days.';
+  body += `\n\nTo accept this estimate, please reply to this email or call us directly.\n\n`;
+  body += `Thank you for choosing ${company}!\n`;
+  if (phone) body += `${phone}\n`;
+  if (email) body += `${email}\n`;
 
-  // Show sending modal
-  document.getElementById('emailModalIcon').textContent = '⏳';
-  document.getElementById('emailModalTitle').textContent = 'Sending Email...';
-  document.getElementById('emailModalMsg').textContent = `Sending estimate to ${clientEmail}`;
-  document.getElementById('emailModal').style.display = 'flex';
-
-  try {
-    await emailjs.send('service_47hmio4', 'template_bzrtexl', {
-      client_name: clientName,
-      client_email: clientEmail,
-      estimate_number: estNum,
-      date: now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-      address: address,
-      line_items: lineItemsText,
-      total: totalText,
-      terms: txt('defaultTerms') || '50% deposit required to schedule. Balance due upon completion.',
-      company_name: txt('companyName') || 'Pioneer Woodwerx General Contracting',
-      company_phone: txt('companyPhone') || '',
-      company_email: txt('companyEmail') || 'pioneerwoodwerx@gmail.com',
-    });
-
-    document.getElementById('emailModalIcon').textContent = '✅';
-    document.getElementById('emailModalTitle').textContent = 'Email Sent!';
-    document.getElementById('emailModalMsg').textContent = `Estimate ${estNum} has been sent to ${clientEmail} successfully!`;
-  } catch(err) {
-    document.getElementById('emailModalIcon').textContent = '❌';
-    document.getElementById('emailModalTitle').textContent = 'Send Failed';
-    document.getElementById('emailModalMsg').textContent = 'Could not send email. Please check your connection and try again.\n\n' + (err.text || err.message || JSON.stringify(err));
-  }
+  const mailtoLink = `mailto:${clientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailtoLink;
 }
 
 // ─── INIT ─────────────────────────────────────────────────────
