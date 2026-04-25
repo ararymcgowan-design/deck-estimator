@@ -24,6 +24,17 @@ exports.handler = async function(event) {
     });
 
     const data = await response.json();
+
+    // Return full error detail from Square
+    if (!response.ok) {
+      const detail = data.errors?.map(e => `[${e.field}] ${e.detail}`).join(' | ') || JSON.stringify(data);
+      return {
+        statusCode: response.status,
+        headers,
+        body: JSON.stringify({ ...data, _debug: detail })
+      };
+    }
+
     return {
       statusCode: response.status,
       headers,
