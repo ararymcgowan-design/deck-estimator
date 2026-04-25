@@ -1613,7 +1613,7 @@ async function squareAPI(endpoint, method, body) {
     body: JSON.stringify({ endpoint, method, body })
   });
   const data = await resp.json();
-  if (!resp.ok) throw new Error(data.errors?.[0]?.detail || data.error || 'Square API error');
+  if (!resp.ok) throw new Error(data._debug || data.errors?.[0]?.detail || data.error || JSON.stringify(data));
   return data;
 }
 
