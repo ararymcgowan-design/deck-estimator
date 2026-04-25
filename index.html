@@ -900,6 +900,67 @@
       </div>
     </div>
 
+    <!-- LIGHTING -->
+    <div class="card">
+      <div class="card-title">💡 Lighting</div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <strong>Step Lights</strong>
+          <p>Recessed lights in each step riser</p>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="chkStepLights" onchange="toggleSub('stepLightsSub', this); updateEstimate()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="sub-fields" id="stepLightsSub">
+        <div class="field-grid">
+          <div class="field">
+            <label>Number of Step Lights</label>
+            <input type="number" id="numStepLights" placeholder="0" min="0" oninput="updateEstimate()">
+          </div>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <strong>Deck Surface Lights</strong>
+          <p>In-deck or under-rail surface lighting</p>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="chkDeckLights" onchange="toggleSub('deckLightsSub', this); updateEstimate()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="sub-fields" id="deckLightsSub">
+        <div class="field-grid">
+          <div class="field">
+            <label>Number of Surface Lights</label>
+            <input type="number" id="numDeckLights" placeholder="0" min="0" oninput="updateEstimate()">
+          </div>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <strong>Post Cap Lights</strong>
+          <p>Lights mounted on top of railing posts</p>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="chkPostLights" onchange="toggleSub('postLightsSub', this); updateEstimate()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="sub-fields" id="postLightsSub">
+        <div class="field-grid">
+          <div class="field">
+            <label>Number of Post Cap Lights</label>
+            <input type="number" id="numPostLights" placeholder="0" min="0" oninput="updateEstimate()">
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MARKUP -->
     <div class="card">
       <div class="card-title">📊 Margin & Tax</div>
@@ -1147,6 +1208,22 @@
     </div>
 
     <div class="card">
+      <div class="card-title">💡 Lighting (flat rate per fixture)</div>
+      <div class="rate-item">
+        <div class="rate-label">Step Light<small>Per fixture, installed</small></div>
+        <div class="input-unit rate-input"><input type="number" id="rate_step_light" value="85" oninput="saveRates()"><span class="unit-label">$/ea</span></div>
+      </div>
+      <div class="rate-item">
+        <div class="rate-label">Deck Surface Light<small>Per fixture, installed</small></div>
+        <div class="input-unit rate-input"><input type="number" id="rate_deck_light" value="95" oninput="saveRates()"><span class="unit-label">$/ea</span></div>
+      </div>
+      <div class="rate-item">
+        <div class="rate-label">Post Cap Light<small>Per fixture, installed</small></div>
+        <div class="input-unit rate-input"><input type="number" id="rate_post_light" value="120" oninput="saveRates()"><span class="unit-label">$/ea</span></div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title">🏢 Your Business Info</div>
       <div class="field-grid">
         <div class="field">
@@ -1328,6 +1405,20 @@ function calculate() {
     lines.push({ name: 'Permit Coordination', qty: '1', total: r('rate_permit') });
   }
 
+  // LIGHTING
+  if (checked('chkStepLights')) {
+    const n = v('numStepLights');
+    if (n > 0) lines.push({ name: 'Step Lights', qty: n + ' fixtures', desc: `$${r('rate_step_light')}/ea`, total: n * r('rate_step_light') });
+  }
+  if (checked('chkDeckLights')) {
+    const n = v('numDeckLights');
+    if (n > 0) lines.push({ name: 'Deck Surface Lights', qty: n + ' fixtures', desc: `$${r('rate_deck_light')}/ea`, total: n * r('rate_deck_light') });
+  }
+  if (checked('chkPostLights')) {
+    const n = v('numPostLights');
+    if (n > 0) lines.push({ name: 'Post Cap Lights', qty: n + ' fixtures', desc: `$${r('rate_post_light')}/ea`, total: n * r('rate_post_light') });
+  }
+
   // CALCULATIONS
   const rawSubtotal = lines.reduce((s, l) => s + l.total, 0);
   const markup = v('markupPct') / 100;
@@ -1443,7 +1534,7 @@ function copyEstimate() {
 }
 
 // ─── SAVE / LOAD RATES ───────────────────────────────────────
-const rateIds = ['rate_pt','rate_cedar','rate_comp_basic','rate_comp_prem','rate_trex','rate_rail_wood','rate_rail_wood_c','rate_rail_alum','rate_rail_cable','rate_rail_glass','rate_post','rate_ledger','rate_demo','rate_labor','rate_elev','rate_high','rate_step','rate_lattice','rate_pergola','rate_bench','rate_permit','companyName','companyPhone','companyEmail','estPrefix','defaultTerms','squareToken','squareLocationId'];
+const rateIds = ['rate_pt','rate_cedar','rate_comp_basic','rate_comp_prem','rate_trex','rate_rail_wood','rate_rail_wood_c','rate_rail_alum','rate_rail_cable','rate_rail_glass','rate_post','rate_ledger','rate_demo','rate_labor','rate_elev','rate_high','rate_step','rate_lattice','rate_pergola','rate_bench','rate_permit','rate_step_light','rate_deck_light','rate_post_light','companyName','companyPhone','companyEmail','estPrefix','defaultTerms','squareToken','squareLocationId'];
 
 function saveRates() {
   const data = {};
@@ -1465,15 +1556,15 @@ function loadRates() {
 // ─── CLEAR FORM ──────────────────────────────────────────────
 function clearForm() {
   if (!confirm('Clear all project data and start fresh?')) return;
-  ['clientFirst','clientLast','clientPhone','clientEmail','clientAddr','clientCity','clientState','clientZip','preNotes','deckLength','deckWidth','railingLf','numSteps','stepWidth','latticeLf','latticeHt','numPosts','demoSqft','structuralHours','pergolaSqft','benchLf','discountAmt','scopeNotes'].forEach(id => {
+  ['clientFirst','clientLast','clientPhone','clientEmail','clientAddr','clientCity','clientState','clientZip','preNotes','deckLength','deckWidth','railingLf','numSteps','stepWidth','latticeLf','latticeHt','numPosts','demoSqft','structuralHours','pergolaSqft','benchLf','discountAmt','scopeNotes','numStepLights','numDeckLights','numPostLights'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = id === 'stepWidth' ? '4' : id === 'discountAmt' ? '0' : '';
   });
-  ['chkNewFrame','chkLedger','chkStructural','chkRailing','chkSteps','chkLattice','chkPergola','chkBenches','chkPermit'].forEach(id => {
+  ['chkNewFrame','chkLedger','chkStructural','chkRailing','chkSteps','chkLattice','chkPergola','chkBenches','chkPermit','chkStepLights','chkDeckLights','chkPostLights'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.checked = false; }
   });
-  ['newFrameSub','structuralSub','railingSub','stepsSub','latticeSub','pergolaSub','benchesSub'].forEach(id => {
+  ['newFrameSub','structuralSub','railingSub','stepsSub','latticeSub','pergolaSub','benchesSub','stepLightsSub','deckLightsSub','postLightsSub'].forEach(id => {
     document.getElementById(id)?.classList.remove('open');
   });
   estCounter = Math.floor(Math.random() * 800) + 100;
