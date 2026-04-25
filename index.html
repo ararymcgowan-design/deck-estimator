@@ -1515,11 +1515,19 @@ function renderSquareBox() {
     </div>`;
 }
 
-async function sendToSquare() {
-  const token = txt('squareToken').trim();
-  if (!token) { alert('Add your Square token in My Rates tab first.'); return; }
+async function squareAPI(endpoint, method, body) {
+  const resp = await fetch('/.netlify/functions/square', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, method, body })
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.errors?.[0]?.detail || data.error || 'Square API error');
+  return data;
+}
 
-  const { lines, grand } = calculate();
+async function sendToSquare() {
+  const { lines } = calculate();
   if (lines.length === 0) { alert('Add project items in the Scope tab first.'); return; }
 
   const clientEmail = txt('clientEmail').trim();
@@ -1532,58 +1540,43 @@ async function sendToSquare() {
     // Step 1: Get location ID
     let locationId = txt('squareLocationId').trim();
     if (!locationId) {
-      const locResp = await fetch('https://connect.squareup.com/v2/locations', {
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' }
-      });
-      const locData = await locResp.json();
-      if (!locResp.ok) throw new Error(locData.errors?.[0]?.detail || 'Could not load locations. Check your token.');
+      const locData = await squareAPI('locations', 'GET');
       locationId = locData.locations?.[0]?.id;
       if (!locationId) throw new Error('No location found in your Square account.');
       document.getElementById('squareLocationId').value = locationId;
       saveRates();
     }
 
-    showSquareModal('⏳', 'Creating Customer...', clientEmail ? `Looking up ${clientFirst} ${clientLast}...` : 'No client email — invoice will be saved without sending.');
+    showSquareModal('⏳', 'Creating Customer...', clientEmail ? `Looking up ${clientFirst} ${clientLast}...` : 'Saving invoice without email...');
 
-    // Step 2: Find or create customer (only if email provided)
+    // Step 2: Find or create customer
     let customerId = null;
     if (clientEmail) {
-      const searchResp = await fetch('https://connect.squareup.com/v2/customers/search', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
-        body: JSON.stringify({ query: { filter: { email_address: { exact: clientEmail } } } })
-      });
-      const searchData = await searchResp.json();
+      const searchData = await squareAPI('customers/search', 'POST', { query: { filter: { email_address: { exact: clientEmail } } } });
       if (searchData.customers?.length > 0) {
         customerId = searchData.customers[0].id;
       } else {
-        // Create new customer
-        const custResp = await fetch('https://connect.squareup.com/v2/customers', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
-          body: JSON.stringify({
-            given_name: clientFirst || 'Client',
-            family_name: clientLast || '',
-            email_address: clientEmail,
-            phone_number: txt('clientPhone').trim() || undefined,
-            address: {
-              address_line_1: txt('clientAddr').trim() || undefined,
-              locality: txt('clientCity').trim() || undefined,
-              administrative_district_level_1: txt('clientState').trim() || undefined,
-              postal_code: txt('clientZip').trim() || undefined,
-              country: 'US'
-            },
-            idempotency_key: 'cust_' + Date.now()
-          })
+        const custData = await squareAPI('customers', 'POST', {
+          given_name: clientFirst || 'Client',
+          family_name: clientLast || '',
+          email_address: clientEmail,
+          phone_number: txt('clientPhone').trim() || undefined,
+          address: {
+            address_line_1: txt('clientAddr').trim() || undefined,
+            locality: txt('clientCity').trim() || undefined,
+            administrative_district_level_1: txt('clientState').trim() || undefined,
+            postal_code: txt('clientZip').trim() || undefined,
+            country: 'US'
+          },
+          idempotency_key: 'cust_' + Date.now()
         });
-        const custData = await custResp.json();
         customerId = custData.customer?.id;
       }
     }
 
     showSquareModal('⏳', 'Building Invoice...', 'Creating line items...');
 
-    // Step 3: Create invoice
+    // Step 3: Create order
     const now = new Date();
     const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 30);
     const fmtISO = d => d.toISOString().split('T')[0];
@@ -1595,61 +1588,42 @@ async function sendToSquare() {
       note: l.desc || undefined
     }));
 
-    const orderResp = await fetch('https://connect.squareup.com/v2/orders', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
-      body: JSON.stringify({
-        order: {
-          location_id: locationId,
-          customer_id: customerId || undefined,
-          line_items: lineItems,
-          metadata: { source: 'DeckPro Estimator' }
-        },
-        idempotency_key: 'order_' + Date.now()
-      })
+    const orderData = await squareAPI('orders', 'POST', {
+      order: {
+        location_id: locationId,
+        customer_id: customerId || undefined,
+        line_items: lineItems
+      },
+      idempotency_key: 'order_' + Date.now()
     });
-    const orderData = await orderResp.json();
-    if (!orderResp.ok) throw new Error(orderData.errors?.[0]?.detail || 'Could not create order.');
     const orderId = orderData.order.id;
 
     // Step 4: Create invoice
-    const invoiceBody = {
+    const invData = await squareAPI('invoices', 'POST', {
       invoice: {
         location_id: locationId,
         order_id: orderId,
-        title: `Deck Project Estimate – ${clientFirst} ${clientLast}`.trim(),
+        title: `Deck Project – ${clientFirst} ${clientLast}`.trim(),
         description: txt('defaultTerms') || 'Deck project estimate.',
         scheduled_at: now.toISOString(),
         payment_requests: [{
           request_type: 'BALANCE',
-          due_date: fmtISO(dueDate),
-          reminders: [{ relative_scheduled_days: -1, message: 'Your deck estimate payment is due tomorrow.' }]
+          due_date: fmtISO(dueDate)
         }],
         delivery_method: clientEmail ? 'EMAIL' : 'SHARE_MANUALLY',
         primary_recipient: customerId ? { customer_id: customerId } : undefined,
         accepted_payment_methods: { card: true, bank_account: true }
       },
       idempotency_key: 'inv_' + Date.now()
-    };
-
-    const invResp = await fetch('https://connect.squareup.com/v2/invoices', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
-      body: JSON.stringify(invoiceBody)
     });
-    const invData = await invResp.json();
-    if (!invResp.ok) throw new Error(invData.errors?.[0]?.detail || 'Could not create invoice.');
     const invoiceId = invData.invoice.id;
 
-    // Step 5: Publish invoice
-    showSquareModal('⏳', 'Publishing...', 'Sending invoice to Square dashboard...');
-    const pubResp = await fetch(`https://connect.squareup.com/v2/invoices/${invoiceId}/publish`, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
-      body: JSON.stringify({ version: invData.invoice.version, idempotency_key: 'pub_' + Date.now() })
+    // Step 5: Publish
+    showSquareModal('⏳', 'Publishing...', 'Sending to Square dashboard...');
+    const pubData = await squareAPI(`invoices/${invoiceId}/publish`, 'POST', {
+      version: invData.invoice.version,
+      idempotency_key: 'pub_' + Date.now()
     });
-    const pubData = await pubResp.json();
-    if (!pubResp.ok) throw new Error(pubData.errors?.[0]?.detail || 'Invoice created but could not publish.');
 
     const invoiceUrl = pubData.invoice?.public_url || '';
     showSquareModal('✅', 'Invoice Sent!',
@@ -1657,7 +1631,7 @@ async function sendToSquare() {
     );
 
   } catch(err) {
-    showSquareModal('❌', 'Something went wrong', err.message + '\n\nDouble-check your token is a Production token (not Sandbox) and try again.');
+    showSquareModal('❌', 'Something went wrong', err.message);
   }
 }
 
