@@ -1651,14 +1651,6 @@ async function sendToSquare() {
           given_name: clientFirst || 'Client',
           family_name: clientLast || '',
           email_address: clientEmail,
-          phone_number: txt('clientPhone').trim() || undefined,
-          address: {
-            address_line_1: txt('clientAddr').trim() || undefined,
-            locality: txt('clientCity').trim() || undefined,
-            administrative_district_level_1: txt('clientState').trim() || undefined,
-            postal_code: txt('clientZip').trim() || undefined,
-            country: 'US'
-          },
           idempotency_key: 'cust_' + Date.now()
         });
         customerId = custData.customer?.id;
